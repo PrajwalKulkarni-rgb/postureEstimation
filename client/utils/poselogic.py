@@ -1,12 +1,24 @@
 import cv2
 import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
 import numpy as np
 import time
 import logging
+import os
 from collections import deque
 
 from utils.normalization import normalize_skeleton
 from utils.filtering import OneEuroFilter
+
+POSE_CONNECTIONS = [
+    (0, 1), (1, 2), (2, 3), (3, 7), (0, 4), (4, 5),
+    (5, 6), (6, 8), (9, 10), (11, 12), (11, 13), 
+    (13, 15), (15, 17), (15, 19), (15, 21), (17, 19),
+    (12, 14), (14, 16), (16, 18), (16, 20), (16, 22), (18, 20),
+    (11, 23), (12, 24), (23, 24), (23, 25), (24, 26), (25, 27),
+    (26, 28), (27, 29), (28, 30), (29, 31), (30, 32), (27, 31), (28, 32)
+]
 
 class SafetyLogic:
     def __init__(self, fps=30):
@@ -35,14 +47,16 @@ class SafetyLogic:
 class PoseLogic:
     def __init__(self):
         self.logger = logging.getLogger("PoseLogic")
-        self.mp_pose = mp.solutions.pose
-        self.pose = self.mp_pose.Pose(
-            min_detection_confidence=0.5,
+        model_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../model/pose_landmarker_full.task'))
+        base_options = python.BaseOptions(model_asset_path=model_path)
+        options = vision.PoseLandmarkerOptions(
+            base_options=base_options,
+            output_segmentation_masks=False,
+            min_pose_detection_confidence=0.5,
             min_tracking_confidence=0.5,
-            model_complexity=1
+            min_pose_presence_confidence=0.5
         )
-        self.mp_drawing = mp.solutions.drawing_utils
-        self.mp_drawing_styles = mp.solutions.drawing_styles
+        self.detector = vision.PoseLandmarker.create_from_options(options)
 
         self.use_ai = False 
         self.SEQ_LEN = 50
@@ -96,10 +110,11 @@ class PoseLogic:
         annotated_img = frame.copy()
         
         image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = self.pose.process(image_rgb)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image_rgb)
+        detection_result = self.detector.detect(mp_image)
         
-        if results.pose_landmarks:
-            raw_lms = results.pose_landmarks.landmark
+        if detection_result.pose_landmarks and len(detection_result.pose_landmarks) > 0:
+            raw_lms = detection_result.pose_landmarks[0]
             lms = self.get_smoothed_landmarks(raw_lms)
             
             #Context Logic
@@ -118,10 +133,20 @@ class PoseLogic:
             is_stooping = (torso_angle < 135) and (knee_angle > 150)
             
             #draw on copy
-            self.mp_drawing.draw_landmarks(
-                annotated_img, results.pose_landmarks, self.mp_pose.POSE_CONNECTIONS,
-                self.mp_drawing_styles.get_default_pose_landmarks_style()
-            )
+            h, w, _ = annotated_img.shape
+            for lm in lms:
+                cx, cy = int(lm.x * w), int(lm.y * h)
+                cv2.circle(annotated_img, (cx, cy), 3, (0, 0, 255), -1)
+            
+            for connection in POSE_CONNECTIONS:
+                p1_idx, p2_idx = connection
+                if p1_idx < len(lms) and p2_idx < len(lms):
+                    p1 = lms[p1_idx]
+                    p2 = lms[p2_idx]
+                    if getattr(p1, 'visibility', 1.0) > 0.3 and getattr(p2, 'visibility', 1.0) > 0.3:
+                        cx1, cy1 = int(p1.x * w), int(p1.y * h)
+                        cx2, cy2 = int(p2.x * w), int(p2.y * h)
+                        cv2.line(annotated_img, (cx1, cy1), (cx2, cy2), (0, 255, 0), 2)
             
             cv2.rectangle(annotated_img, (0,0), (450, 80), self.color, -1)
             cv2.putText(annotated_img, self.status, (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255,255,255), 2)

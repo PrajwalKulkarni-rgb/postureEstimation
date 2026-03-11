@@ -1,5 +1,7 @@
 import cv2
 import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
 import numpy as np
 import glob
 import os
@@ -11,9 +13,13 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 DATA_ROOT = "Data/" 
 OUTPUT_X = "trainable_data/x_train.npy"
 OUTPUT_Y = "trainable_data/y_train.npy"
-
-mp_pose = mp.solutions.pose
-pose = mp_pose.Pose(static_image_mode=False, model_complexity=1, min_detection_confidence=0.5)
+model_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'pose_landmarker_full.task'))
+base_options = python.BaseOptions(model_asset_path=model_path)
+options = vision.PoseLandmarkerOptions(
+    base_options=base_options,
+    output_segmentation_masks=False,
+    min_pose_detection_confidence=0.5)
+detector = vision.PoseLandmarker.create_from_options(options)
 
 def calculate_angle(a, b, c):
     """Calculates 3D angle at vertex b."""
@@ -91,10 +97,11 @@ def process_video(video_path):
         if frame_count % SKIP != 0: continue
 
         image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = pose.process(image)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image)
+        detection_result = detector.detect(mp_image)
         
-        if results.pose_landmarks:
-            lms = results.pose_landmarks.landmark
+        if detection_result.pose_landmarks and len(detection_result.pose_landmarks) > 0:
+            lms = detection_result.pose_landmarks[0]
             
             # 1. GET NUANCED LABEL
             label = get_bio_mechanical_label(lms)
