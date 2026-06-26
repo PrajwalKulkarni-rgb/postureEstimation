@@ -165,9 +165,9 @@ class Trainer:
                     self.save_confusion_matrix(self.last_cm_preds, self.last_cm_labels, run_dir, epoch+1)
                     
                     self.logger.info(f"★ New Best Model Saved! ({v_acc:.2f}%) - Confusion Matrix Saved")
-                else:
-                    self.patience_counter += 1
+                # else:
+                #     self.patience_counter += 1
                     
-                if self.patience_counter >= self.cfg.EARLY_STOPPING_PATIENCE:
-                    self.logger.info(f"Early stopping triggered after {epoch+1} epochs.")
-                    break
+                # if self.patience_counter >= self.cfg.EARLY_STOPPING_PATIENCE:
+                #     self.logger.info(f"Early stopping triggered after {epoch+1} epochs.")
+                #     break

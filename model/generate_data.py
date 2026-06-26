@@ -11,8 +11,9 @@ from utils.normalization import normalize_skeleton
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
 DATA_ROOT = "Data/" 
-OUTPUT_X = "trainable_data/x_train.npy"
-OUTPUT_Y = "trainable_data/y_train.npy"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_X = os.path.join(SCRIPT_DIR, "trainable_data/x_train.npy")
+OUTPUT_Y = os.path.join(SCRIPT_DIR, "trainable_data/y_train.npy")
 model_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'pose_landmarker_full.task'))
 base_options = python.BaseOptions(model_asset_path=model_path)
 options = vision.PoseLandmarkerOptions(
@@ -43,11 +44,16 @@ def get_bio_mechanical_label(lms):
     - Bent (Class 3): 20-60 deg flexion (Angle 120-160)
     - Strongly Bent (Class 4): >60 deg flexion (Angle < 120)
     """
-    # Extract Joints
-    shoulder = [lms[11].x, lms[11].y, lms[11].z]
-    hip =      [lms[23].x, lms[23].y, lms[23].z]
-    knee =     [lms[25].x, lms[25].y, lms[25].z]
-    ankle =    [lms[27].x, lms[27].y, lms[27].z]
+    def get_midpoint(idx1, idx2):
+        return [(lms[idx1].x + lms[idx2].x) / 2,
+                (lms[idx1].y + lms[idx2].y) / 2,
+                (lms[idx1].z + lms[idx2].z) / 2]
+
+    # Extract 3D Midpoints for a bias-free skeletal center
+    shoulder = get_midpoint(11, 12)
+    hip = get_midpoint(23, 24)
+    knee = get_midpoint(25, 26)
+    ankle = get_midpoint(27, 28)
     
     # 1. Calculate EAWS Trunk Angle (Hip vertex)
     # 180 = Straight Standing
@@ -126,8 +132,29 @@ def process_video(video_path):
             y_labels.append(label)
 
     cap.release()
-    return X_frames, y_labels
+    
+    # --- CHUNK INTO SEQUENCES PER VIDEO ---
+    X_seq, y_seq = [], []
+    seq_length = 50
+    stride = 20
+    
+    for i in range(0, len(X_frames) - seq_length + 1, stride):
+        clip = X_frames[i : i+seq_length]
+        labels = y_labels[i : i+seq_length]
+        
+        # Robust Labeling: Majority vote with bias for critical classes
+        crit_count = labels.count(2)
+        bad_count = labels.count(1)
+        threshold = seq_length * 0.2
+        
+        if crit_count > threshold: label = 2
+        elif bad_count > threshold: label = 1
+        else: label = 0
+        
+        X_seq.append(clip)
+        y_seq.append(label)
 
+    return X_seq, y_seq
 if __name__ == "__main__":
     search = os.path.join(DATA_ROOT, "**", "*.mp4")
     files = glob.glob(search, recursive=True)
@@ -141,6 +168,7 @@ if __name__ == "__main__":
         all_y.extend(y)
         
     if all_X:
+        os.makedirs(os.path.dirname(OUTPUT_X), exist_ok=True)
         np.save(OUTPUT_X, np.array(all_X))
         np.save(OUTPUT_Y, np.array(all_y))
         logging.info("SUCCESS! Nuanced Dataset Created.")

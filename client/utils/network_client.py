@@ -2,6 +2,7 @@ import websocket
 import threading
 import json
 import logging
+import numpy as np
 
 class NetworkClient:
     def __init__(self, url):
@@ -30,16 +31,12 @@ class NetworkClient:
         wst.start()
 
     def send_skeleton(self, skeleton_data):
-        """Sends skeleton data (List or Numpy) to server."""
+        """Sends a single skeleton frame (Numpy array) as binary bytes."""
         if self._connected and self.ws:
             try:
-                # Ensure data is JSON serializable (convert numpy to list)
-                if hasattr(skeleton_data, 'tolist'):
-                    payload = json.dumps(skeleton_data.tolist())
-                else:
-                    payload = json.dumps(skeleton_data)
-                
-                self.ws.send(payload)
+                # Convert directly to raw float32 bytes for zero-overhead transmission
+                payload = skeleton_data.astype(np.float32).tobytes()
+                self.ws.send(payload, opcode=websocket.ABNF.OPCODE_BINARY)
             except Exception as e:
                 self.logger.error(f"Send failed: {e}")
 

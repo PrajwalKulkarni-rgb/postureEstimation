@@ -172,14 +172,22 @@ class ModernWindow(QMainWindow):
         if self.is_recording:
             self.toggle_recording() 
             
-        if self.camera_thread:
-            self.camera_thread.stop()
-            self.camera_thread.wait()
+        try:
+            if self.camera_thread:
+                self.camera_thread.stop()
+                self.camera_thread.wait()
+        except RuntimeError:
+            pass # Object already deleted by deleteLater
+            
         if self.inference_worker:
             self.inference_worker.stop()
-        if self.inference_thread:
-            self.inference_thread.quit()
-            self.inference_thread.wait()
+            
+        try:
+            if self.inference_thread:
+                self.inference_thread.quit()
+                self.inference_thread.wait()
+        except RuntimeError:
+            pass # Object already deleted by deleteLater
             
         self.btn_start.setEnabled(True)
         self.btn_stop.setEnabled(False)

@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+websockets
+websocket-client
+numpy
+opencv-python
+mediapipe
+PyQt6
+pandas
+matplotlib
+seaborn

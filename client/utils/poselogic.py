@@ -61,7 +61,7 @@ class PoseLogic:
         self.use_ai = False 
         self.SEQ_LEN = 50
         self.buffer = deque(maxlen=self.SEQ_LEN)
-        self.filters = {} 
+        self.filters = {}
         self.safety_monitor = SafetyLogic(fps=30)
         self.status = "Initializing"
         self.color = (0, 255, 0) 
@@ -130,7 +130,21 @@ class PoseLogic:
             #geometric logic
             torso_angle = self.calculate_angle(lms[11], lms[23], lms[25])
             knee_angle = self.calculate_angle(lms[23], lms[25], lms[27])
-            is_stooping = (torso_angle < 135) and (knee_angle > 150)
+            
+            # EAWS Standardized Edge Logic (Fallback if server is disconnected)
+            is_critical = (torso_angle < 120) and is_lifting
+            is_warning = (120 <= torso_angle < 160) and (knee_angle > 150) and is_lifting
+            
+            if "Server" not in self.status: # Only fallback if server didn't provide a fresh update
+                if is_critical:
+                    self.status = "CRITICAL (Edge)"
+                    self.color = (0, 0, 255)
+                elif is_warning:
+                    self.status = "Warning (Edge)"
+                    self.color = (0, 165, 255)
+                else:
+                    self.status = "Safe (Edge)"
+                    self.color = (0, 255, 0)
             
             #draw on copy
             h, w, _ = annotated_img.shape

@@ -15,29 +15,9 @@ class SkeletonDataset(Dataset):
         except FileNotFoundError:
             raise FileNotFoundError(f"Data files not found at {x_path} or {y_path}")
 
-        X_seq, y_seq = [], []
-        stride = 20
-        
-        # Convert flat frames to sequences
-        for i in range(0, len(X) - self.seq_length, stride):
-            clip = X[i : i+self.seq_length]
-            labels = y[i : i+self.seq_length]
-            
-            # Robust Labeling: Majority vote with bias for critical classes
-            crit_count = np.sum(labels == 2)
-            bad_count = np.sum(labels == 1)
-            threshold = self.seq_length * 0.2
-            
-            if crit_count > threshold: label = 2
-            elif bad_count > threshold: label = 1
-            else: label = 0
-            
-            # Reshape: (50, 102) -> (50, 17, 6)
-            clip = clip.reshape(self.seq_length, 17, 6)
-            X_seq.append(clip)
-            y_seq.append(label)
-            
-        return np.array(X_seq), torch.tensor(np.array(y_seq), dtype=torch.long)
+        # X is already chunked to (N, 50, 102), reshape to (N, 50, 17, 6)
+        X_seq = X.reshape(-1, self.seq_length, 17, 6)
+        return X_seq, torch.tensor(y, dtype=torch.long)
 
     def _augment_physics(self, clip):
         """Apply random rotation and jitter."""
@@ -58,17 +38,20 @@ class SkeletonDataset(Dataset):
         pos += np.random.normal(0, 0.002, pos.shape)
 
         if np.random.rand() < 0.2:
-            # Set x,y,z, vx,vy,vz to 0 for legs
-            clip[:, 11:17, :] = 0 
+            # Freeze legs to their first frame position, zero velocity
+            clip[:, 11:17, 0:3] = clip[0, 11:17, 0:3] 
+            clip[:, 11:17, 3:6] = 0 
             
-        # 10% chance to zero out one arm (Simulate side view blockage)
+        # 10% chance to freeze one arm (Simulate side view blockage)
         if np.random.rand() < 0.1:
             if np.random.rand() < 0.5:
-                clip[:, 5:11:2, :] = 0 # Left Arm
+                clip[:, 5:11:2, 0:3] = clip[0, 5:11:2, 0:3] # Freeze Left Arm pos
+                clip[:, 5:11:2, 3:6] = 0 # Zero Left Arm vel
             else:
-                clip[:, 6:12:2, :] = 0 # Right Arm
+                clip[:, 6:12:2, 0:3] = clip[0, 6:12:2, 0:3] # Freeze Right Arm pos
+                clip[:, 6:12:2, 3:6] = 0 # Zero Right Arm vel
                 
-        return np.concatenate((pos, vel), axis=2)
+        return clip
 
     def __len__(self):
         return len(self.y)

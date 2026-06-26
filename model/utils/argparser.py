@@ -7,8 +7,8 @@ from typing import List
 DEFAULTS = {
     # Paths
     "DATA_DIR": "Data/",
-    "X_PATH": "trainable_data/x_train.npy",
-    "Y_PATH": "trainable_data/y_train.npy",
+    "X_PATH": os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "trainable_data/x_train.npy"),
+    "Y_PATH": os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "trainable_data/y_train.npy"),
     "RUNS_DIR": "runs",
     "MODEL_SAVE_NAME": "stgcn_posture_model.pth",
     
