@@ -49,22 +49,17 @@ class ModernWindow(QMainWindow):
         header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(header)
 
-        # --- 2. Video Feeds (Horizontal Layout) ---
-        feeds_layout = QHBoxLayout()
-        feeds_layout.setSpacing(30)
-        
-        # Left: Raw Camera
-        self.raw_container = self.create_feed_container("Raw Input Feed")
-        self.raw_label = self.raw_container.findChild(QLabel, "FeedLabel")
-        feeds_layout.addWidget(self.raw_container)
-        
-        # Right: AI Analysis (With Status Border)
+        # --- 2. Video Feed ---
+        # Single Full-Size AI Analysis Feed (With Status Border)
         self.model_container = self.create_feed_container("AI Analysis Feed")
         self.model_label = self.model_container.findChild(QLabel, "FeedLabel")
-        self.model_frame = self.model_container  # We will color this border
-        feeds_layout.addWidget(self.model_container)
         
-        main_layout.addLayout(feeds_layout, stretch=1)
+        # Maximize the feed to use all available space
+        self.model_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.model_label.setMinimumSize(800, 600) 
+        
+        self.model_frame = self.model_container  # We will color this border
+        main_layout.addWidget(self.model_container, stretch=1)
 
         # --- 3. Alert Overlay (Status Bar) ---
         self.alert_bar = QLabel("SYSTEM READY")
@@ -148,8 +143,6 @@ class ModernWindow(QMainWindow):
         # Connect Signals
         self.camera_thread.frame_captured.connect(self.inference_worker.process_frame)
         
-        self.inference_worker.update_raw_feed.connect(self.set_raw)
-        
         # RECORDING HOOK: Connect to the Analysis Feed
         self.inference_worker.update_model_feed.connect(self.set_model)
         self.inference_worker.update_model_feed.connect(self.handle_recording_qimage)
@@ -199,6 +192,11 @@ class ModernWindow(QMainWindow):
         self.refresh_style()
 
     def update_status_ui(self, status_msg):
+        # UI Performance Fix: Only repaint if the status actually changed!
+        if hasattr(self, '_last_status') and self._last_status == status_msg:
+            return
+        self._last_status = status_msg
+        
         if "CRITICAL" in status_msg:
             color = "#FF0000" 
             style_id = "AlertBar_Critical"
@@ -226,10 +224,6 @@ class ModernWindow(QMainWindow):
         self.style().unpolish(self.alert_bar)
         self.style().polish(self.alert_bar)
 
-    def set_raw(self, img): 
-        self.raw_label.setPixmap(QPixmap.fromImage(img).scaled(
-            self.raw_label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-    
     def set_model(self, img): 
         self.model_label.setPixmap(QPixmap.fromImage(img).scaled(
             self.model_label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))

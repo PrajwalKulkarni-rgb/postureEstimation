@@ -7,8 +7,8 @@ class CameraWorker(QThread):
     """
     Responsible only for capturing frames from the hardware.
     """
-    # Emits the raw numpy array (OpenCV format)
-    frame_captured = pyqtSignal(np.ndarray)
+    # Emits a tuple of (timestamp, raw numpy array)
+    frame_captured = pyqtSignal(object)
     error_occurred = pyqtSignal(str)
 
     def __init__(self, camera_index=0):
@@ -18,7 +18,10 @@ class CameraWorker(QThread):
         self.logger = logging.getLogger("CameraWorker")
 
     def run(self):
-        cap = cv2.VideoCapture(self.camera_index)
+        import time
+        # Force V4L2 backend
+        cap = cv2.VideoCapture(self.camera_index, cv2.CAP_V4L2)
+        # Instruct V4L2 to only hold 1 frame in buffer
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
         if not cap.isOpened():
@@ -31,8 +34,8 @@ class CameraWorker(QThread):
                 self.error_occurred.emit("Frame drop or camera disconnected")
                 break
             
-            #emit the raw frame immediately. No processing.
-            self.frame_captured.emit(frame)
+            # Emit the raw frame with its creation timestamp
+            self.frame_captured.emit((time.time(), frame))
             self.msleep(1)
 
         cap.release()

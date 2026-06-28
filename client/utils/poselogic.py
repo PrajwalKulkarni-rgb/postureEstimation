@@ -64,7 +64,7 @@ class PoseLogic:
         self.filters = {}
         self.safety_monitor = SafetyLogic(fps=30)
         self.status = "Initializing"
-        self.color = (0, 255, 0) 
+        self.color = (200, 200, 200) 
 
     def get_smoothed_landmarks(self, raw_landmarks):
         timestamp = time.time()
@@ -144,13 +144,13 @@ class PoseLogic:
                     self.color = (0, 165, 255)
                 else:
                     self.status = "Safe (Edge)"
-                    self.color = (0, 255, 0)
+                    self.color = (200, 200, 200)
             
             #draw on copy
             h, w, _ = annotated_img.shape
             for lm in lms:
                 cx, cy = int(lm.x * w), int(lm.y * h)
-                cv2.circle(annotated_img, (cx, cy), 3, (0, 0, 255), -1)
+                cv2.circle(annotated_img, (cx, cy), 4, self.color, -1)
             
             for connection in POSE_CONNECTIONS:
                 p1_idx, p2_idx = connection
@@ -160,12 +160,6 @@ class PoseLogic:
                     if getattr(p1, 'visibility', 1.0) > 0.3 and getattr(p2, 'visibility', 1.0) > 0.3:
                         cx1, cy1 = int(p1.x * w), int(p1.y * h)
                         cx2, cy2 = int(p2.x * w), int(p2.y * h)
-                        cv2.line(annotated_img, (cx1, cy1), (cx2, cy2), (0, 255, 0), 2)
-            
-            cv2.rectangle(annotated_img, (0,0), (450, 80), self.color, -1)
-            cv2.putText(annotated_img, self.status, (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255,255,255), 2)
-            
-            debug_text = f"Torso: {int(torso_angle)} | Lift: {is_lifting}"
-            cv2.putText(annotated_img, debug_text, (10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,255,255), 1)
+                        cv2.line(annotated_img, (cx1, cy1), (cx2, cy2), self.color, 2)
             
         return annotated_img

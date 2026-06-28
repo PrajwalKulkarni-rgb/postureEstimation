@@ -86,14 +86,26 @@ def get_bio_mechanical_label(lms):
             
     return 0 # Default
 
+def interpolate_sequence(timestamps, frames, target_timestamps):
+    """Linearly interpolates a sequence of frames to match exact target timestamps."""
+    N, V, C = frames.shape
+    interpolated = np.zeros((len(target_timestamps), V, C), dtype=np.float32)
+    for v in range(V):
+        for c in range(C):
+            interpolated[:, v, c] = np.interp(target_timestamps, timestamps, frames[:, v, c])
+    return interpolated
+
 def process_video(video_path):
     cap = cv2.VideoCapture(video_path)
-    X_frames, y_labels = [], []
-    frame_count = 0
     
-    # Velocity Tracking
-    prev_norm_skel = None
-    SKIP = 3 
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    if fps <= 0: fps = 30.0 # fallback
+
+    raw_frames = []
+    raw_timestamps = []
+    y_labels_raw = []
+    frame_count = 0
+    SKIP = 2 # Process every 2nd frame to speed up Mediapipe, but physics remains accurate
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -101,6 +113,8 @@ def process_video(video_path):
         
         frame_count += 1
         if frame_count % SKIP != 0: continue
+        
+        timestamp = frame_count / fps
 
         image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image)
@@ -108,51 +122,73 @@ def process_video(video_path):
         
         if detection_result.pose_landmarks and len(detection_result.pose_landmarks) > 0:
             lms = detection_result.pose_landmarks[0]
-            
-            # 1. GET NUANCED LABEL
             label = get_bio_mechanical_label(lms)
             
-            # 2. EXTRACT DATA
             indices = [0, 2, 5, 7, 8, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]
             skel_raw = np.array([[lms[i].x, lms[i].y, lms[i].z] for i in indices])
-            
-            # 3. NORMALIZE
             norm_skel = normalize_skeleton(skel_raw)
             
-            # 4. VELOCITY
-            if prev_norm_skel is None:
-                velocity = np.zeros_like(norm_skel)
-            else:
-                velocity = norm_skel - prev_norm_skel
-            prev_norm_skel = norm_skel
-            
-            # 5. STACK
-            combined = np.concatenate((norm_skel, velocity), axis=1)
-            X_frames.append(combined.flatten())
-            y_labels.append(label)
+            raw_frames.append(norm_skel)
+            raw_timestamps.append(timestamp)
+            y_labels_raw.append(label)
 
     cap.release()
     
-    # --- CHUNK INTO SEQUENCES PER VIDEO ---
-    X_seq, y_seq = [], []
-    seq_length = 50
-    stride = 20
+    if len(raw_frames) < 10:
+        return [], []
+
+    raw_frames = np.array(raw_frames)
+    raw_timestamps = np.array(raw_timestamps)
     
-    for i in range(0, len(X_frames) - seq_length + 1, stride):
-        clip = X_frames[i : i+seq_length]
-        labels = y_labels[i : i+seq_length]
+    # --- TEMPORAL INTERPOLATION (FPS-Agnostic) ---
+    X_seq, y_seq = [], []
+    
+    # We want exactly 50 frames representing exactly 5.0 seconds of real-world motion.
+    SEQ_LEN = 50
+    WINDOW_DURATION = 5.0 
+    DT = WINDOW_DURATION / SEQ_LEN # 0.1 seconds per frame
+    
+    # Slide a 5-second window over the video
+    start_time = raw_timestamps[0]
+    end_time = raw_timestamps[-1]
+    
+    current_t = start_time
+    while current_t + WINDOW_DURATION <= end_time:
+        window_start = current_t
+        window_end = current_t + WINDOW_DURATION
         
-        # Robust Labeling: Majority vote with bias for critical classes
-        crit_count = labels.count(2)
-        bad_count = labels.count(1)
-        threshold = seq_length * 0.2
+        # Get all frames that fall within this 5.0s window
+        mask = (raw_timestamps >= window_start) & (raw_timestamps <= window_end)
+        window_times = raw_timestamps[mask]
+        window_frames = raw_frames[mask]
+        window_labels = [y_labels_raw[i] for i, m in enumerate(mask) if m]
         
-        if crit_count > threshold: label = 2
-        elif bad_count > threshold: label = 1
-        else: label = 0
-        
-        X_seq.append(clip)
-        y_seq.append(label)
+        # We need at least 10 valid points to interpolate safely
+        if len(window_times) >= 10:
+            target_times = np.linspace(window_start, window_end, SEQ_LEN)
+            
+            # Interpolate to exactly 50 perfectly-spaced frames
+            S_interp = interpolate_sequence(window_times, window_frames, target_times)
+            
+            # True Physics Velocity: (p2 - p1) / dt
+            V_interp = np.diff(S_interp, axis=0, prepend=S_interp[0:1]) / DT
+            
+            # Combine
+            combined = np.concatenate((S_interp, V_interp), axis=2) # (50, 17, 6)
+            
+            # Label
+            crit_count = window_labels.count(2)
+            bad_count = window_labels.count(1)
+            threshold = len(window_labels) * 0.2
+            
+            if crit_count > threshold: label = 2
+            elif bad_count > threshold: label = 1
+            else: label = 0
+            
+            X_seq.append(combined.reshape(SEQ_LEN, -1)) # (50, 102)
+            y_seq.append(label)
+            
+        current_t += 1.0 # 1 second stride
 
     return X_seq, y_seq
 if __name__ == "__main__":

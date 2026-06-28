@@ -10,7 +10,8 @@ def find_available_cameras(max_to_check=5):
     """
     available_cameras = []
     for i in range(max_to_check):
-        cap = cv2.VideoCapture(i)
+        # Force V4L2 backend to avoid FFMPEG buffering
+        cap = cv2.VideoCapture(i, cv2.CAP_V4L2)
         if cap.isOpened():
             available_cameras.append(f"Camera {i}")
             cap.release()

@@ -65,14 +65,14 @@ STYLESHEET = """
     }
     QPushButton:hover { background-color: #444; }
     
-    #BtnStart { background-color: #0066cc; border: 1px solid #0088ff; }
-    #BtnStart:hover { background-color: #0077dd; }
+    #BtnStart { background-color: #333; border: 1px solid #555; }
+    #BtnStart:hover { background-color: #4a4a4a; }
     
-    #BtnStop { background-color: #cc0000; border: 1px solid #ff4444; }
-    #BtnStop:hover { background-color: #dd0000; }
+    #BtnStop { background-color: #2b2b2b; border: 1px solid #444; }
+    #BtnStop:hover { background-color: #3d3d3d; }
     
     #BtnExit { background-color: #222; border: 1px solid #666; color: #aaa; }
-    #BtnExit:hover { background-color: #333; color: white; }
+    #BtnExit:hover { background-color: #444; color: white; }
     
     QComboBox {
         background-color: #333;

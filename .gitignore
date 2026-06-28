@@ -21,3 +21,5 @@ model/utils/pose_results_two.py
 
 accuracy_plot.png!
 metrics_evolution.png!
+server/logs
+*.npy

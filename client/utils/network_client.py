@@ -30,12 +30,14 @@ class NetworkClient:
         wst.daemon = True
         wst.start()
 
-    def send_skeleton(self, skeleton_data):
-        """Sends a single skeleton frame (Numpy array) as binary bytes."""
+    def send_skeleton(self, skeleton_data, timestamp):
+        """Sends a single skeleton frame (Numpy array) with timestamp as binary bytes."""
         if self._connected and self.ws:
             try:
-                # Convert directly to raw float32 bytes for zero-overhead transmission
-                payload = skeleton_data.astype(np.float32).tobytes()
+                import struct
+                # Pack timestamp (8-byte float64) followed by the 51 float32s
+                ts_bytes = struct.pack('d', float(timestamp))
+                payload = ts_bytes + skeleton_data.astype(np.float32).tobytes()
                 self.ws.send(payload, opcode=websocket.ABNF.OPCODE_BINARY)
             except Exception as e:
                 self.logger.error(f"Send failed: {e}")
