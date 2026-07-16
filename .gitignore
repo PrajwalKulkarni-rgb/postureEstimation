@@ -23,3 +23,5 @@ accuracy_plot.png!
 metrics_evolution.png!
 server/logs
 *.npy
+
+study/
