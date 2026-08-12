@@ -37,6 +37,10 @@ class SkeletonDataset(Dataset):
         # Add Jitter
         pos += np.random.normal(0, 0.002, pos.shape)
 
+        # Write rotated + jittered data back to clip
+        clip[:, :, 0:3] = pos
+        clip[:, :, 3:6] = vel
+
         if np.random.rand() < 0.2:
             # Freeze legs to their first frame position, zero velocity
             clip[:, 11:17, 0:3] = clip[0, 11:17, 0:3] 
@@ -57,7 +61,7 @@ class SkeletonDataset(Dataset):
         return len(self.y)
 
     def __getitem__(self, idx):
-        clip = self.X[idx]
+        clip = self.X[idx].copy()
         if self.augment:
             clip = self._augment_physics(clip)
         
