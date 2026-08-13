@@ -24,5 +24,6 @@ metrics_evolution.png!
 server/logs
 *.npy
 
-study/_archive/
+study/
+_archive/
 logs/
